@@ -1,17 +1,34 @@
 // Requires
-//const process = require("process");
 const http = require("http");
 const express = require("express");
 const path = require("path");
 const { Server } = require("socket.io");
 const app = express();
 const server = http.createServer(app);
+const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
+const _ = require("underscore");
+
 require("./config/config");
+require("./api/token_list");
 
 // Imports
-const getUniqueID = require("./users");
-const checkPrice  = require("./api");
-const { Session } = require("inspector");
+const getUniqueID = require("../routes/users");
+const checkPrice  = require("./api/token_price");
+
+// Connect to MongoDB
+mongoose.connect(process.env.DB, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  useFindAndModify: false,
+  useCreateIndex: true
+}, (err, res) => {
+
+  if (err) throw err;
+
+  console.log("CONNECTED to DB");
+
+});
 
 // Process ID
 console.log(process.pid);
@@ -44,6 +61,9 @@ app.use(express.urlencoded({ extended: true }));
 
 // Servir contenido estático siempre desde la carpeta "public"
 app.use(express.static("public"));
+
+// API USERS
+//app.use( require("../routes/users") );
 
 /////////////////////////////
 // INICIO MANEJO DE SOCKETS//
@@ -81,13 +101,68 @@ server.listen(process.env.PORT, () => {
 
 });
 
+////////////////////////////
+// INICIO API REST TOKENS //
+////////////////////////////
+const Token = require("./models/token");
+const getTokenList = require("./api/token_list");
+const getTokenPrice = require("./api/token_price");
+
+app.get("/tokens", async (req, res) => {
+
+  console.log("Querying token list...");
+  const tokenList = await getTokenList();
+  console.log("This is the list of tokens: " + JSON.stringify(tokenList));
+
+});
+
+app.get("/price/:token", async (req, res) => {
+
+  let token = req.params.token;
+
+  console.log("Querying token prices...");
+  getTokenPrice(token);
+
+});
+
 ///////////////////////////
 // INICIO API REST USERS //
 ///////////////////////////
+const User = require("./models/user");
 
 // GET
 app.get("/user", (req, res) => {
-  res.json("GET User");
+  
+  let from = req.query.from || 15;
+  from = Number(from);
+
+  let limit = req.query.limit || 5;
+  limit = Number(limit);
+  
+  User.find({}, "name email role status google binance")
+      .skip(from)
+      .limit(limit)
+      .exec( (err, users) => {
+
+        if(err) {
+          return res.status(400).json({
+            ok: false,
+            err
+          })
+        }
+
+        User.countDocuments({}, (err, count) => {
+
+          res.json({
+            ok: true,
+            users,
+            totalUsers: count
+          })
+
+        })
+        
+      })
+
 });
 
 // POST
@@ -95,22 +170,28 @@ app.post("/user", (req, res) => {
 
   let body = req.body;
 
-  if ( body.name === undefined ) {
+  let user = new User({
+    name: body.name,
+    email: body.email,
+    password: bcrypt.hashSync(body.password, 10),
+    role: body.role
+  });
 
-      res.status(400).json({
+  user.save( (err, userDB) => {
+
+    if(err) {
+      return res.status(400).json({
         ok: false,
-        mensaje: "User name is mandatory."
-      });
+        err
+      })
+    }
 
-  } else {
+    res.json({
+      ok: true,
+      user: userDB
+    });
 
-      res.json({
-        body
-      });
-
-  }
-
-
+  });
 
 });
 
@@ -118,14 +199,57 @@ app.post("/user", (req, res) => {
 app.put("/user/:id", (req, res) => {
   
   let id = req.params.id;
+  let body = _.pick(req.body, ['name', 'email', 'img', 'role', 'status']);
 
-   res.json({
-     id
-   });
+  User.findByIdAndUpdate(id, body, { new: true , runValidators: true }, (err, userDB) => {
 
-});
+    if(err) {
+      return res.status(400).json({
+        ok: false,
+        err
+      })
+    }
+
+    res.json({
+      ok: true,
+      user: userDB
+    });
+
+  });
+})
+
 
 // DELETE
-app.delete("/user", (req, res) => {
-  res.json("DELETE User");
+app.delete("/user/:id", (req, res) => {
+  
+  let id = req.params.id;
+
+  User.findByIdAndUpdate(id, { status: false }, { new: true , runValidators: true }, (err, userDeleted) => {
+
+    if(err) {
+      return res.status(400).json({
+        ok: false,
+        err
+      })
+    }
+
+    if(!userDeleted) {
+
+      res.status(400).json({
+        ok: false,
+        err: {
+          message: "User not found"
+        }
+      });
+      
+    }
+
+    res.json({
+      ok: true,
+      user: userDeleted
+    });
+
+
+  });
+
 });
