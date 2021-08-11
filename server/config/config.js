@@ -5,4 +5,4 @@ process.env.PORT = process.env.PORT || 3001;
 process.env.NODE_ENV = process.env.NODE_ENV || "dev"
 
 // API-KEY
-process.env.API_KEY = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+process.env.API_KEY = "BQY5wayTu6KZOqVhwqhGLGBHqQfxPTKV";
