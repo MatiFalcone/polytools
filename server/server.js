@@ -1,69 +1,21 @@
 // Requires
 const http = require("http");
 const express = require("express");
-const path = require("path");
+//const expressGraphQL = require("express-graphql").graphqlHTTP;
 const { Server } = require("socket.io");
 const app = express();
 const server = http.createServer(app);
-const mongoose = require("mongoose");
-const bcrypt = require("bcrypt");
-const _ = require("underscore");
 
+// Config file
 require("./config/config");
-require("./api/token_list");
-
-// Imports
-const getUniqueID = require("../routes/users");
-const checkPrice  = require("./api/token_price");
-
-// Connect to MongoDB
-mongoose.connect(process.env.DB, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  useFindAndModify: false,
-  useCreateIndex: true
-}, (err, res) => {
-
-  if (err) throw err;
-
-  console.log("CONNECTED to DB");
-
-});
 
 // Process ID
 console.log(process.pid);
-
-// Handle signal
-process.on("SIGUSR1", function() {
-  // Call API
-  checkPrice();
-  // Emitir que terminé a todos los clientes
-  //client.broadcast.emit("Esta es la señal SIGUSR2");
-})
-
-process.on("SIGTERM", signal => {
-  console.log(`Process ${process.pid} received a SIGTERM signal`)
-  process.exit(0)
-})
-
-process.on("SIGINT", signal => {
-  console.log(`Process ${process.pid} has been interrupted`)
-  process.exit(0)
-})
 
 const io = new Server(server);
 
 // All active connections go in this object
 const clients = {};
-
-// Parse x-www-form-urlencoded
-app.use(express.urlencoded({ extended: true }));
-
-// Servir contenido estático siempre desde la carpeta "public"
-app.use(express.static("public"));
-
-// API USERS
-//app.use( require("../routes/users") );
 
 /////////////////////////////
 // INICIO MANEJO DE SOCKETS//
@@ -104,152 +56,63 @@ server.listen(process.env.PORT, () => {
 ////////////////////////////
 // INICIO API REST TOKENS //
 ////////////////////////////
-const Token = require("./models/token");
-const getTokenList = require("./api/token_list");
-const getTokenPrice = require("./api/token_price");
+const getTokenInfo = require("./query/token_info");
+const getLastTrades = require("./query/token_last_trades");
+const getCandleData = require("./query/ohlc");
 
-app.get("/tokens", async (req, res) => {
+// Retrieves the information of the token address specified in :token using WMATIC as quote currency
+app.get("/tokenInfo/:token", async (req, res) => {
 
-  console.log("Querying token list...");
-  const tokenList = await getTokenList();
-  console.log("This is the list of tokens: " + JSON.stringify(tokenList));
+  let tokenAddress = req.params.token;
 
-});
+  const tokenInfo = await getTokenInfo(tokenAddress);
 
-app.get("/price/:token", async (req, res) => {
-
-  let token = req.params.token;
-
-  console.log("Querying token prices...");
-  getTokenPrice(token);
-
-});
-
-///////////////////////////
-// INICIO API REST USERS //
-///////////////////////////
-const User = require("./models/user");
-
-// GET
-app.get("/user", (req, res) => {
-  
-  let from = req.query.from || 15;
-  from = Number(from);
-
-  let limit = req.query.limit || 5;
-  limit = Number(limit);
-  
-  User.find({}, "name email role status google binance")
-      .skip(from)
-      .limit(limit)
-      .exec( (err, users) => {
-
-        if(err) {
-          return res.status(400).json({
-            ok: false,
-            err
-          })
-        }
-
-        User.countDocuments({}, (err, count) => {
-
-          res.json({
-            ok: true,
-            users,
-            totalUsers: count
-          })
-
-        })
-        
-      })
-
-});
-
-// POST
-app.post("/user", (req, res) => {
-
-  let body = req.body;
-
-  let user = new User({
-    name: body.name,
-    email: body.email,
-    password: bcrypt.hashSync(body.password, 10),
-    role: body.role
-  });
-
-  user.save( (err, userDB) => {
-
-    if(err) {
-      return res.status(400).json({
-        ok: false,
-        err
-      })
-    }
-
-    res.json({
-      ok: true,
-      user: userDB
-    });
-
+  res.json({
+    ok: true,
+    tokenInfo
   });
 
 });
 
-// PUT
-app.put("/user/:id", (req, res) => {
-  
-  let id = req.params.id;
-  let body = _.pick(req.body, ['name', 'email', 'img', 'role', 'status']);
+// Retrieves the last 5 QuickSwap trades of the token address specified in :token
+app.get("/lastTrades/:token", async (req, res) => {
 
-  User.findByIdAndUpdate(id, body, { new: true , runValidators: true }, (err, userDB) => {
+  let tokenAddress = req.params.token;
 
-    if(err) {
-      return res.status(400).json({
-        ok: false,
-        err
-      })
-    }
+  const tokenLastTrades = await getLastTrades(tokenAddress);
 
-    res.json({
-      ok: true,
-      user: userDB
-    });
-
+  res.json({
+    ok: true,
+    tokenLastTrades
   });
-})
 
+});
 
-// DELETE
-app.delete("/user/:id", (req, res) => {
+// Retrieves OHLC data from the last 10 QuickSwap trades of :token (using startTime/endTime range)
+app.get("/ohlc", async (req, res) => {
+
+  let base = req.query.baseToken;
+  let quote = req.query.quoteCurrency;
+  let since = req.query.since;
+  let until = req.query.until;
+    /* 1m = 1
+     5m = 5   
+    15m = 15
+    30m = 30
+     1h = 60
+     4h = 240
+     1d = 1440
+     1w = 10080
+  */
+  let window = req.query.window;
+  let limit = req.query.limit;
   
-  let id = req.params.id;
+  //GetCandleData($baseCurrency: String!, $since: ISO8601DateTime, $quoteCurrency: String!,)
+  const dataOHLC = await getCandleData(base, quote, since, until, window, limit);
 
-  User.findByIdAndUpdate(id, { status: false }, { new: true , runValidators: true }, (err, userDeleted) => {
-
-    if(err) {
-      return res.status(400).json({
-        ok: false,
-        err
-      })
-    }
-
-    if(!userDeleted) {
-
-      res.status(400).json({
-        ok: false,
-        err: {
-          message: "User not found"
-        }
-      });
-      
-    }
-
-    res.json({
-      ok: true,
-      user: userDeleted
-    });
-
-
+  res.json({
+    ok: true,
+    dataOHLC
   });
 
 });
