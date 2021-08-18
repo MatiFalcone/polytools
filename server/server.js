@@ -59,11 +59,14 @@ server.listen(process.env.PORT, () => {
 const getTokenInfo = require("./query/token_info");
 const getLastTrades = require("./query/token_last_trades");
 const getCandleData = require("./query/ohlc");
+const getPairData = require("./query/pair_mint_burn_swap");
+const getPairInfoAt = require("./query/pair_info");
+const getBlockNumber = require("./query/blocks");
 
 // Retrieves the information of the token address specified in :token using WMATIC as quote currency
-app.get("/tokenInfo/:token", async (req, res) => {
+app.get("/tokenInfo", async (req, res) => {
 
-  let tokenAddress = req.params.token;
+  let tokenAddress = req.query.token;
 
   const tokenInfo = await getTokenInfo(tokenAddress);
 
@@ -75,11 +78,12 @@ app.get("/tokenInfo/:token", async (req, res) => {
 });
 
 // Retrieves the last 5 QuickSwap trades of the token address specified in :token
-app.get("/lastTrades/:token", async (req, res) => {
+app.get("/lastTrades", async (req, res) => {
 
-  let tokenAddress = req.params.token;
+  let tokenAddress = req.query.token;
+  let exchangeAddress = req.query.exchange;
 
-  const tokenLastTrades = await getLastTrades(tokenAddress);
+  const tokenLastTrades = await getLastTrades(tokenAddress, exchangeAddress);
 
   res.json({
     ok: true,
@@ -88,31 +92,56 @@ app.get("/lastTrades/:token", async (req, res) => {
 
 });
 
-// Retrieves OHLC data from the last 10 QuickSwap trades of :token (using startTime/endTime range)
+// Retrieves OHLC data 
 app.get("/ohlc", async (req, res) => {
 
   let base = req.query.baseToken;
   let quote = req.query.quoteCurrency;
   let since = req.query.since;
   let until = req.query.until;
-    /* 1m = 1
-     5m = 5   
-    15m = 15
-    30m = 30
-     1h = 60
-     4h = 240
-     1d = 1440
-     1w = 10080
-  */
   let window = req.query.window;
   let limit = req.query.limit;
-  
-  //GetCandleData($baseCurrency: String!, $since: ISO8601DateTime, $quoteCurrency: String!,)
+
   const dataOHLC = await getCandleData(base, quote, since, until, window, limit);
 
   res.json({
     ok: true,
     dataOHLC
+  });
+
+});
+
+// Retrieves the information of a Pair
+app.get("/pairData", async (req, res) => {
+
+  let pairAddress = req.query.pair;
+
+  const pairData = await getPairData(pairAddress);
+
+  res.json({
+    ok: true,
+    pairData
+  });
+
+});
+
+// Retrieves the block number at the last height of the MATIC network 
+app.get("/pairInfo", async (req, res) => {
+
+  let pairAddress = req.query.pair;
+
+  let timestamp = Math.floor(Date.now() / 1000);
+
+  const blockData = await getBlockNumber(timestamp);
+
+  let blockNumber = parseInt(blockData.data.blocks[0].number);
+  console.log(blockNumber);
+
+  const pairInfo = await getPairInfoAt(blockNumber, pairAddress);
+
+  res.json({
+    ok: true,
+    pairInfo
   });
 
 });

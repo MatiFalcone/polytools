@@ -1,20 +1,24 @@
 const fetch = require("node-fetch");
- 
+const Redis = require("ioredis");
+
+// Redis instance
+const redis = new Redis(process.env.REDIS_URL);
+
 async function getCandleData(baseToken, quoteCurrency, since, until, window, limit) {
 
   const query = `
   {
     ethereum(network: matic) {
       dexTrades(
-        options: {asc: "timeInterval.minute", limit: ` + limit + `}
-        date: {since: "` + since + `", till: "` + until + `"}
+        options: {asc: "timeInterval.minute", limit: ${limit}}
+        date: {since: "${since}", till: "${until}"}
         exchangeName: {in: "QuickSwap"}
-        baseCurrency: {is: "` + baseToken + `"}
-        quoteCurrency: {is: "` + quoteCurrency + `"} # WMATIC
+        baseCurrency: {is: "${baseToken}"}
+        quoteCurrency: {is: "${quoteCurrency}"} # WMATIC
         tradeAmountUsd: {gt: 10}
       ) {
         timeInterval {
-          minute(count: ` + window + `, format: "%Y-%m-%dT%H:%M:%SZ")
+          minute(count: ${window}, format: "%Y-%m-%dT%H:%M:%SZ")
         }
         baseCurrency {
           symbol
@@ -49,8 +53,20 @@ const opts = {
     })
 };
 
+// Check if I have a cache value for this response
+let cacheEntry = await redis.get(`ohlc:${baseToken}+${quoteCurrency}+${since}+${until}+${window}+${limit}`);
+
+// If we have a cache hit
+if (cacheEntry) {
+    cacheEntry = JSON.parse(cacheEntry);
+    // return that entry
+    return cacheEntry;
+}
+
 const response = await fetch(url, opts);
 const data = await response.json();
+// Save entry in cache for 1 minute
+redis.set(`ohlc:${baseToken}+${quoteCurrency}+${since}+${until}+${window}+${limit}`, JSON.stringify(data), "EX", 60);
 return data;
 
 }

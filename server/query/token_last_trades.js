@@ -1,14 +1,18 @@
 const fetch = require("node-fetch");
- 
-async function getLastTrades(tokenAddress) {
+const Redis = require("ioredis");
+
+// Redis instance
+const redis = new Redis(process.env.REDIS_URL);
+
+async function getLastTrades(tokenAddress, exchangeAddress) {
 
   const query = `
   {
     ethereum(network: matic) {
       dexTrades(
-        options: {limit: 5, desc: "block.height"}
-        exchangeName: {in: ["QuickSwap"]}
-        baseCurrency: {is: "` + tokenAddress + `"}
+        options: {limit: 10, desc: "block.height"}
+        exchangeName: {in: ["${exchangeAddress}"]}
+        baseCurrency: {is: "${tokenAddress}"}
       ) {
         transaction {
           hash
@@ -73,8 +77,20 @@ const opts = {
     })
 };
 
+// Check if I have a cache value for this response
+let cacheEntry = await redis.get(`lastTrades:${tokenAddress}+${exchangeAddress}`);
+
+// If we have a cache hit
+if (cacheEntry) {
+    cacheEntry = JSON.parse(cacheEntry);
+    // return that entry
+    return cacheEntry;
+}
+
 const response = await fetch(url, opts);
 const data = await response.json();
+// Save entry in cache for 5 minutes
+redis.set(`lastTrades:${tokenAddress}+${exchangeAddress}`, JSON.stringify(data), "EX", 300);
 return data;
 
 }
