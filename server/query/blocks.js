@@ -4,7 +4,7 @@ async function getBlockNumber(timestamp) {
 
     const query = `
       query blocks {
-        blocks(first: 1, orderBy: timestamp, orderDirection: desc, where: {timestamp_gt: ${timestamp-60000}, timestamp_lt: ${timestamp}}) {
+        blocks(first: 1, orderBy: timestamp, orderDirection: desc, where: {timestamp_gt: ${timestamp-180000}, timestamp_lt: ${timestamp-120000}}) {
           number
           __typename
         }

@@ -1,8 +1,16 @@
 const fetch = require("node-fetch");
 const Redis = require("ioredis");
 
+let redis;
 // Redis instance
-const redis = new Redis(process.env.REDIS_URL);
+if(process.env.NODE_ENV !== "production") {
+  redis = new Redis({
+    "port":6379,
+    "host":"localhost"
+  })
+} else {
+  redis = new Redis(process.env.REDIS_URL);
+}
 
 async function getLastTrades(tokenAddress, exchangeAddress) {
 
@@ -61,8 +69,6 @@ async function getLastTrades(tokenAddress, exchangeAddress) {
     }
   }  
 `;
-
-console.log(query);
 
 const url = "https://graphql.bitquery.io/";
 

@@ -1,13 +1,13 @@
 // Requires
+if (process.env.NODE_ENV !== "production") {
+  require("dotenv").config();
+}
 const http = require("http");
 const express = require("express");
-//const expressGraphQL = require("express-graphql").graphqlHTTP;
+const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io");
 const app = express();
 const server = http.createServer(app);
-
-// Config file
-require("./config/config");
 
 // Process ID
 console.log(process.pid);
@@ -53,6 +53,19 @@ server.listen(process.env.PORT, () => {
 
 });
 
+app.post("/auth", (req, res) => {
+
+  let token = jwt.sign({
+      user: "Correct Sign In"
+  }, process.env.SEED, { expiresIn: process.env.TOKEN_EXPIRATION })
+
+  res.json({
+    ok: true,
+    token
+  });
+
+})
+
 ////////////////////////////
 // INICIO API REST TOKENS //
 ////////////////////////////
@@ -67,8 +80,9 @@ const getBlockNumber = require("./query/blocks");
 app.get("/tokenInfo", async (req, res) => {
 
   let tokenAddress = req.query.token;
+  let exchangeAddress = req.query.exchange;
 
-  const tokenInfo = await getTokenInfo(tokenAddress);
+  const tokenInfo = await getTokenInfo(tokenAddress, exchangeAddress);
 
   res.json({
     ok: true,
