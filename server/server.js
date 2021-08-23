@@ -7,7 +7,14 @@ const express = require("express");
 const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io");
 const app = express();
+const bcrypt = require("bcrypt");
+const cors = require("cors");
 const server = http.createServer(app);
+const verifyToken = require("../middlewares/authentication");
+app.use(express.urlencoded({ extended: true }));
+app.use(cors({
+  origin: "*"
+}));
 
 // Process ID
 console.log(process.pid);
@@ -55,8 +62,19 @@ server.listen(process.env.PORT, () => {
 
 app.post("/auth", (req, res) => {
 
+  let body = req.body;
+
+  if(!bcrypt.compareSync(body.password, process.env.PASS)) { // PolyT00ls2021@#
+    return res.status(400).json({
+      ok: false,
+      err: {
+        message: "Incorrect authentication"
+      } 
+    });
+  }
+
   let token = jwt.sign({
-      user: "Correct Sign In"
+      user: "Correct Authentication"
   }, process.env.SEED, { expiresIn: process.env.TOKEN_EXPIRATION })
 
   res.json({
